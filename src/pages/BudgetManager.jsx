@@ -1,30 +1,37 @@
 import React, { useState, useEffect } from 'react';
 import Button from '../components/Button';
 import { formatNumberWithCommas, numberToKorean } from '../utils/formatters';
+import { useClass } from '../context/ClassContext';
 import './BudgetManager.css';
 
 const BudgetManager = () => {
+    const { currentClass } = useClass();
+    const classId = currentClass?.id || 'default';
     const [budgets, setBudgets] = useState([]);
     const [selectedBudgetId, setSelectedBudgetId] = useState(null);
     const [newBudget, setNewBudget] = useState({ name: '', totalAmount: '' });
     const [newExpense, setNewExpense] = useState({ date: new Date().toISOString().split('T')[0], purpose: '', amount: '', note: '' });
 
-    // Load budgets from localStorage on mount
+    // Load budgets from localStorage when class changes
     useEffect(() => {
-        const savedBudgets = localStorage.getItem('budgets');
+        const budgetsKey = `budgets_${classId}`;
+        const savedBudgets = localStorage.getItem(budgetsKey);
         if (savedBudgets) {
             setBudgets(JSON.parse(savedBudgets));
+        } else {
+            setBudgets([]);
         }
-    }, []);
+    }, [classId]);
 
     // Save budgets to localStorage whenever they change
     useEffect(() => {
+        const budgetsKey = `budgets_${classId}`;
         if (budgets.length > 0) {
-            localStorage.setItem('budgets', JSON.stringify(budgets));
+            localStorage.setItem(budgetsKey, JSON.stringify(budgets));
         } else {
-            localStorage.removeItem('budgets');
+            localStorage.removeItem(budgetsKey);
         }
-    }, [budgets]);
+    }, [budgets, classId]);
 
     const handleAmountChange = (e, setter, state) => {
         const value = e.target.value;

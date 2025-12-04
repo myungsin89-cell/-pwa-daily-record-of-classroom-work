@@ -4,12 +4,13 @@ import { useAuth } from '../context/AuthContext';
 import { useClass } from '../context/ClassContext';
 import { useSaveStatus } from '../context/SaveStatusContext';
 import Sidebar from './Sidebar';
+import InstallBanner from './InstallBanner';
 import './Layout.css';
 import { useInstallPrompt } from '../hooks/useInstallPrompt';
 
 const Layout = () => {
     const { user, logout } = useAuth();
-    const { currentClass } = useClass();
+    const { currentClass, clearCurrentClass } = useClass();
     const navigate = useNavigate();
     const [isSidebarOpen, setIsSidebarOpen] = React.useState(false);
     const { getTimeText, isSaving, lastSaved } = useSaveStatus();
@@ -21,6 +22,7 @@ const Layout = () => {
     };
 
     const handleChangeClass = () => {
+        clearCurrentClass();
         navigate('/select-class');
     };
 
@@ -61,11 +63,6 @@ const Layout = () => {
                         </div>
                     </div>
                     <div className="header-actions">
-                        {isInstallable && (
-                            <button onClick={promptInstall} className="install-btn">
-                                ⬇️ 앱 설치
-                            </button>
-                        )}
                         <button onClick={handleChangeClass} className="change-class-btn">
                             학급 변경
                         </button>
@@ -78,6 +75,9 @@ const Layout = () => {
                     <Outlet />
                 </div>
             </main>
+
+            {/* PWA Install Banner */}
+            <InstallBanner isInstallable={isInstallable} onInstall={promptInstall} />
         </div>
     );
 };

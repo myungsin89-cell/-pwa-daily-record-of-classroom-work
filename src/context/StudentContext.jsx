@@ -31,13 +31,32 @@ export const StudentProvider = ({ children }) => {
     };
 
     const updateAttendance = (date, studentId, status) => {
-        setAttendance((prev) => ({
-            ...prev,
-            [date]: {
-                ...prev[date],
-                [studentId]: status,
-            },
-        }));
+        setAttendance((prev) => {
+            const newAttendance = { ...prev };
+
+            // If status is null, remove the student's attendance for that date
+            if (status === null) {
+                if (newAttendance[date]) {
+                    const updatedDate = { ...newAttendance[date] };
+                    delete updatedDate[studentId];
+
+                    // If no students left for this date, remove the date entry
+                    if (Object.keys(updatedDate).length === 0) {
+                        delete newAttendance[date];
+                    } else {
+                        newAttendance[date] = updatedDate;
+                    }
+                }
+            } else {
+                // Set or update the status
+                newAttendance[date] = {
+                    ...newAttendance[date],
+                    [studentId]: status,
+                };
+            }
+
+            return newAttendance;
+        });
     };
 
     const addJournalEntry = (studentId, entry) => {

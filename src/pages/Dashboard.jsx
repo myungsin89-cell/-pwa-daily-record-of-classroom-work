@@ -2,11 +2,15 @@ import React, { useState, useEffect, useRef } from 'react';
 import Button from '../components/Button';
 import Card from '../components/Card';
 import { useSaveStatus } from '../context/SaveStatusContext';
+import { useClass } from '../context/ClassContext';
 
 // TodoItem Component with Style Editor
-const TodoItem = ({ todo, index, dateStr, toggleTodo, deleteTodo, updateTodoStyle, onDragStart, onDragOver, onDrop }) => {
+const TodoItem = ({ todo, index, dateStr, toggleTodo, deleteTodo, updateTodoStyle, updateTodoText, onDragStart, onDragOver, onDrop }) => {
     const [showEditor, setShowEditor] = useState(false);
+    const [isEditing, setIsEditing] = useState(false);
+    const [editText, setEditText] = useState(todo.text);
     const editorRef = useRef(null);
+    const inputRef = useRef(null);
 
     // Close editor when clicking outside
     useEffect(() => {
@@ -18,6 +22,35 @@ const TodoItem = ({ todo, index, dateStr, toggleTodo, deleteTodo, updateTodoStyl
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+
+    // Focus input when editing starts
+    useEffect(() => {
+        if (isEditing && inputRef.current) {
+            inputRef.current.focus();
+            inputRef.current.select();
+        }
+    }, [isEditing]);
+
+    const handleDoubleClick = () => {
+        setIsEditing(true);
+        setEditText(todo.text);
+    };
+
+    const handleSaveEdit = () => {
+        if (editText.trim() && editText !== todo.text) {
+            updateTodoText(dateStr, todo.id, editText.trim());
+        }
+        setIsEditing(false);
+    };
+
+    const handleKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            handleSaveEdit();
+        } else if (e.key === 'Escape') {
+            setIsEditing(false);
+            setEditText(todo.text);
+        }
+    };
 
     const handleStyleChange = (property, value) => {
         const currentStyle = todo.style || {};
@@ -53,18 +86,40 @@ const TodoItem = ({ todo, index, dateStr, toggleTodo, deleteTodo, updateTodoStyl
                 type="checkbox"
                 checked={todo.completed}
                 onChange={() => toggleTodo(dateStr, todo.id)}
+                className="todo-checkbox"
             />
-            <span
-                className={todo.completed ? 'completed' : ''}
-                style={{
-                    color: todo.style?.color || 'inherit',
-                    fontWeight: todo.style?.fontWeight || 'normal',
-                    fontStyle: todo.style?.fontStyle || 'normal',
-                    fontSize: todo.style?.fontSize || '1rem',
-                }}
-            >
-                {todo.text}
-            </span>
+            {isEditing ? (
+                <input
+                    ref={inputRef}
+                    type="text"
+                    value={editText}
+                    onChange={(e) => setEditText(e.target.value)}
+                    onBlur={handleSaveEdit}
+                    onKeyDown={handleKeyDown}
+                    className="todo-edit-input"
+                    style={{
+                        color: todo.style?.color || 'inherit',
+                        fontWeight: todo.style?.fontWeight || 'normal',
+                        fontStyle: todo.style?.fontStyle || 'normal',
+                        fontSize: todo.style?.fontSize || '1rem',
+                    }}
+                />
+            ) : (
+                <span
+                    className={todo.completed ? 'completed' : ''}
+                    onDoubleClick={handleDoubleClick}
+                    style={{
+                        color: todo.style?.color || 'inherit',
+                        fontWeight: todo.style?.fontWeight || 'normal',
+                        fontStyle: todo.style?.fontStyle || 'normal',
+                        fontSize: todo.style?.fontSize || '1rem',
+                        cursor: 'text',
+                    }}
+                    title="더블클릭하여 수정"
+                >
+                    {todo.text}
+                </span>
+            )}
 
             {/* Style Trigger Button */}
             <button
@@ -120,33 +175,59 @@ const TodoItem = ({ todo, index, dateStr, toggleTodo, deleteTodo, updateTodoStyl
 };
 
 const Dashboard = () => {
+    const { currentClass } = useClass();
+    const classId = currentClass?.id || 'default';
     const [currentDate, setCurrentDate] = useState(new Date());
     const [todos, setTodos] = useState({});
     const [weeklyNotes, setWeeklyNotes] = useState({});
     const { updateSaveStatus } = useSaveStatus();
     const [isLoaded, setIsLoaded] = useState(false);
 
-    // Load data from localStorage on mount
+    // Helper to format date as YYYY-MM-DD in local timezone
+    const formatDateLocal = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    };
+
+    // Load data from localStorage on mount or when class changes
     useEffect(() => {
-        const savedTodos = localStorage.getItem('teacher_diary_todos');
-        const savedNotes = localStorage.getItem('teacher_diary_notes');
-        if (savedTodos) setTodos(JSON.parse(savedTodos));
-        if (savedNotes) setWeeklyNotes(JSON.parse(savedNotes));
+        const todosKey = `teacher_diary_todos_${classId}`;
+        const notesKey = `teacher_diary_notes_${classId}`;
+
+        const savedTodos = localStorage.getItem(todosKey);
+        const savedNotes = localStorage.getItem(notesKey);
+
+        if (savedTodos) {
+            setTodos(JSON.parse(savedTodos));
+        } else {
+            setTodos({});
+        }
+
+        if (savedNotes) {
+            setWeeklyNotes(JSON.parse(savedNotes));
+        } else {
+            setWeeklyNotes({});
+        }
+
         setIsLoaded(true);
-    }, []);
+    }, [classId]);
 
     // Save data to localStorage whenever it changes
     useEffect(() => {
         if (!isLoaded) return;
-        localStorage.setItem('teacher_diary_todos', JSON.stringify(todos));
+        const todosKey = `teacher_diary_todos_${classId}`;
+        localStorage.setItem(todosKey, JSON.stringify(todos));
         updateSaveStatus();
-    }, [todos, updateSaveStatus, isLoaded]);
+    }, [todos, updateSaveStatus, isLoaded, classId]);
 
     useEffect(() => {
         if (!isLoaded) return;
-        localStorage.setItem('teacher_diary_notes', JSON.stringify(weeklyNotes));
+        const notesKey = `teacher_diary_notes_${classId}`;
+        localStorage.setItem(notesKey, JSON.stringify(weeklyNotes));
         updateSaveStatus();
-    }, [weeklyNotes, updateSaveStatus, isLoaded]);
+    }, [weeklyNotes, updateSaveStatus, isLoaded, classId]);
 
     // Helper to get the start of the week (Monday)
     const getStartOfWeek = (date) => {
@@ -157,7 +238,7 @@ const Dashboard = () => {
     };
 
     const startOfWeek = getStartOfWeek(currentDate);
-    const weekKey = startOfWeek.toISOString().split('T')[0];
+    const weekKey = formatDateLocal(startOfWeek);
 
     // Generate 7 days of the week
     const weekDays = Array.from({ length: 7 }, (_, i) => {
@@ -218,6 +299,15 @@ const Dashboard = () => {
             ...prev,
             [dateStr]: prev[dateStr].map(todo =>
                 todo.id === todoId ? { ...todo, style: newStyle } : todo
+            )
+        }));
+    };
+
+    const updateTodoText = (dateStr, todoId, newText) => {
+        setTodos(prev => ({
+            ...prev,
+            [dateStr]: prev[dateStr].map(todo =>
+                todo.id === todoId ? { ...todo, text: newText } : todo
             )
         }));
     };
@@ -320,8 +410,8 @@ const Dashboard = () => {
             <div className="weekly-grid">
                 {/* Weekdays (Mon-Fri) */}
                 {weekDays.slice(0, 5).map((day) => {
-                    const dateStr = day.toISOString().split('T')[0];
-                    const isToday = new Date().toISOString().split('T')[0] === dateStr;
+                    const dateStr = formatDateLocal(day);
+                    const isToday = formatDateLocal(new Date()) === dateStr;
                     const dayTodos = todos[dateStr] || [];
                     const dayName = day.toLocaleDateString('ko-KR', { weekday: 'short' });
                     const dateNum = day.getDate();
@@ -343,6 +433,7 @@ const Dashboard = () => {
                                         toggleTodo={toggleTodo}
                                         deleteTodo={deleteTodo}
                                         updateTodoStyle={updateTodoStyle}
+                                        updateTodoText={updateTodoText}
                                         onDragStart={handleDragStart}
                                         onDragOver={handleDragOver}
                                         onDrop={handleDrop}
@@ -385,15 +476,16 @@ const Dashboard = () => {
                                 <span className="weekend-date-num">{weekDays[5].getDate()}일</span>
                             </div>
                             <div className="todo-list weekend-todo-list">
-                                {Array.isArray(todos[weekDays[5].toISOString().split('T')[0]]) && todos[weekDays[5].toISOString().split('T')[0]].map((todo, index) => (
+                                {Array.isArray(todos[formatDateLocal(weekDays[5])]) && todos[formatDateLocal(weekDays[5])].map((todo, index) => (
                                     <TodoItem
                                         key={todo.id}
                                         index={index}
                                         todo={todo}
-                                        dateStr={weekDays[5].toISOString().split('T')[0]}
+                                        dateStr={formatDateLocal(weekDays[5])}
                                         toggleTodo={toggleTodo}
                                         deleteTodo={deleteTodo}
                                         updateTodoStyle={updateTodoStyle}
+                                        updateTodoText={updateTodoText}
                                         onDragStart={handleDragStart}
                                         onDragOver={handleDragOver}
                                         onDrop={handleDrop}
@@ -406,7 +498,7 @@ const Dashboard = () => {
                                     placeholder="+ 할 일 추가"
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter') {
-                                            addTodo(weekDays[5].toISOString().split('T')[0], e.target.value);
+                                            addTodo(formatDateLocal(weekDays[5]), e.target.value);
                                             e.target.value = '';
                                         }
                                     }}
@@ -424,15 +516,16 @@ const Dashboard = () => {
                                 <span className="weekend-date-num">{weekDays[6].getDate()}일</span>
                             </div>
                             <div className="todo-list weekend-todo-list">
-                                {Array.isArray(todos[weekDays[6].toISOString().split('T')[0]]) && todos[weekDays[6].toISOString().split('T')[0]].map((todo, index) => (
+                                {Array.isArray(todos[formatDateLocal(weekDays[6])]) && todos[formatDateLocal(weekDays[6])].map((todo, index) => (
                                     <TodoItem
                                         key={todo.id}
                                         index={index}
                                         todo={todo}
-                                        dateStr={weekDays[6].toISOString().split('T')[0]}
+                                        dateStr={formatDateLocal(weekDays[6])}
                                         toggleTodo={toggleTodo}
                                         deleteTodo={deleteTodo}
                                         updateTodoStyle={updateTodoStyle}
+                                        updateTodoText={updateTodoText}
                                         onDragStart={handleDragStart}
                                         onDragOver={handleDragOver}
                                         onDrop={handleDrop}
@@ -445,7 +538,7 @@ const Dashboard = () => {
                                     placeholder="+ 할 일 추가"
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter') {
-                                            addTodo(weekDays[6].toISOString().split('T')[0], e.target.value);
+                                            addTodo(formatDateLocal(weekDays[6]), e.target.value);
                                             e.target.value = '';
                                         }
                                     }}
@@ -558,52 +651,86 @@ const Dashboard = () => {
                     display: flex;
                     align-items: flex-start;
                     gap: 0.3rem;
-                    padding: 0.25rem 0 0.25rem 18px;
+                    padding: 0.25rem 0.25rem 0.25rem 12px;
                     font-size: 0.9rem;
                     position: relative;
                     cursor: grab;
                     transition: background-color 0.2s, transform 0.2s;
                     border-radius: 4px;
+                    width: 100%;
+                    min-width: 0;
                 }
 
                 .todo-item.dragging {
-                    opacity: 0.5;
-                    background-color: #f1f5f9;
+                    opacity: 0.4;
+                    background-color: #e0e7ff;
                     cursor: grabbing;
+                    transform: scale(1.02);
+                    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
                 }
 
                 .todo-item:hover {
                     background-color: #f8fafc;
                 }
 
+                .todo-list.drag-over {
+                    background-color: #dbeafe;
+                    border: 2px dashed var(--color-primary);
+                    border-radius: 8px;
+                }
+
                 .drag-handle {
                     position: absolute;
-                    left: 0;
+                    left: -1px;
                     top: 50%;
                     transform: translateY(-50%);
                     color: var(--color-text-muted);
                     cursor: grab;
-                    font-size: 1.1rem;
+                    font-size: 0.85rem;
                     line-height: 1;
-                    opacity: 0;
-                    transition: opacity 0.2s;
+                    opacity: 0.25;
+                    transition: opacity 0.2s, color 0.2s, transform 0.2s;
                     user-select: none;
-                    width: 18px;
+                    width: 12px;
                     text-align: center;
                 }
 
                 .todo-item:hover .drag-handle {
-                    opacity: 0.5;
+                    opacity: 0.6;
                 }
-                
+
                 .todo-item:hover .drag-handle:hover {
                     opacity: 1;
                     color: var(--color-primary);
+                    transform: translateY(-50%) scale(1.1);
                 }
 
-                .todo-item input[type="checkbox"] {
-                    margin-top: 0.3rem;
+                .drag-handle:active {
+                    cursor: grabbing;
+                }
+
+                .todo-item .todo-checkbox {
+                    margin-top: 0.2rem;
                     cursor: pointer;
+                    width: 18px;
+                    height: 18px;
+                    min-width: 18px;
+                    flex-shrink: 0;
+                    accent-color: var(--color-primary);
+                }
+
+                .todo-edit-input {
+                    flex: 1;
+                    border: 1px solid var(--color-primary);
+                    background: white;
+                    padding: 0.2rem 0.4rem;
+                    border-radius: 4px;
+                    outline: none;
+                    font-family: inherit;
+                    line-height: 1.4;
+                    width: 0;
+                    min-width: 0;
+                    max-width: 100%;
                 }
 
                 .todo-item span {
@@ -765,6 +892,7 @@ const Dashboard = () => {
                     border-radius: var(--radius-sm);
                     resize: vertical;
                     font-family: inherit;
+                    font-size: 0.9rem;
                     line-height: 1.6;
                     outline: none;
                 }

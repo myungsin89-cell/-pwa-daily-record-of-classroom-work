@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { useStudentContext } from '../context/StudentContext';
+import { useClass } from '../context/ClassContext';
 import Button from '../components/Button';
 import './AssignmentManager.css';
 
 import { useSaveStatus } from '../context/SaveStatusContext';
 
 const AssignmentManager = () => {
+    const { currentClass } = useClass();
+    const classId = currentClass?.id || 'default';
     const { students } = useStudentContext();
     const [assignments, setAssignments] = useState([]);
     const [selectedAssignmentId, setSelectedAssignmentId] = useState(null);
@@ -13,26 +16,30 @@ const AssignmentManager = () => {
     const { updateSaveStatus } = useSaveStatus();
     const [isLoaded, setIsLoaded] = useState(false);
 
-    // Load assignments from localStorage
+    // Load assignments from localStorage when class changes
     useEffect(() => {
-        const savedAssignments = localStorage.getItem('assignments');
+        const assignmentsKey = `assignments_${classId}`;
+        const savedAssignments = localStorage.getItem(assignmentsKey);
         if (savedAssignments) {
             setAssignments(JSON.parse(savedAssignments));
+        } else {
+            setAssignments([]);
         }
         setIsLoaded(true);
-    }, []);
+    }, [classId]);
 
     // Save assignments to localStorage
     useEffect(() => {
         if (!isLoaded) return;
 
+        const assignmentsKey = `assignments_${classId}`;
         if (assignments.length > 0) {
-            localStorage.setItem('assignments', JSON.stringify(assignments));
+            localStorage.setItem(assignmentsKey, JSON.stringify(assignments));
         } else {
-            localStorage.setItem('assignments', JSON.stringify([]));
+            localStorage.setItem(assignmentsKey, JSON.stringify([]));
         }
         updateSaveStatus();
-    }, [assignments, updateSaveStatus, isLoaded]);
+    }, [assignments, updateSaveStatus, isLoaded, classId]);
 
     const handleAddAssignment = () => {
         if (!newAssignmentTitle.trim()) {

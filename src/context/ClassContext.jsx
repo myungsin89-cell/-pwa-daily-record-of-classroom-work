@@ -71,12 +71,18 @@ export const ClassProvider = ({ children }) => {
         }
     };
 
+    const clearCurrentClass = () => {
+        localStorage.removeItem('currentClass');
+        setCurrentClass(null);
+    };
+
     const value = {
         currentClass,
         classes,
         createClass,
         selectClass,
-        deleteClass
+        deleteClass,
+        clearCurrentClass
     };
 
     return <ClassContext.Provider value={value}>{children}</ClassContext.Provider>;

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Button from '../components/Button';
 import { useSaveStatus } from '../context/SaveStatusContext';
+import { useClass } from '../context/ClassContext';
 
 const COLORS = [
     { name: '노란색', value: '#fef08a', shadow: '#facc15' },
@@ -72,6 +73,8 @@ const StickyNote = ({ note, onUpdate, onDelete, onDragStart, onDragEnd, onDragOv
 };
 
 const Notepad = () => {
+    const { currentClass } = useClass();
+    const classId = currentClass?.id || 'default';
     const [notes, setNotes] = useState([]);
     const [selectedColor, setSelectedColor] = useState(COLORS[0]);
     const [showColorPicker, setShowColorPicker] = useState(false);
@@ -80,23 +83,28 @@ const Notepad = () => {
     const { updateSaveStatus } = useSaveStatus();
     const [isLoaded, setIsLoaded] = useState(false);
 
-    // Load notes from localStorage
+    // Load notes from localStorage when class changes
     useEffect(() => {
-        const savedNotes = localStorage.getItem('teacher_notepad');
+        const notesKey = `teacher_notepad_${classId}`;
+        const savedNotes = localStorage.getItem(notesKey);
+
         if (savedNotes) {
             setNotes(JSON.parse(savedNotes));
+        } else {
+            setNotes([]);
         }
         setIsLoaded(true);
-    }, []);
+    }, [classId]);
 
     // Save notes to localStorage
     useEffect(() => {
         if (!isLoaded) return;
-        localStorage.setItem('teacher_notepad', JSON.stringify(notes));
+        const notesKey = `teacher_notepad_${classId}`;
+        localStorage.setItem(notesKey, JSON.stringify(notes));
         if (notes.length > 0) {
             updateSaveStatus();
         }
-    }, [notes, updateSaveStatus, isLoaded]);
+    }, [notes, updateSaveStatus, isLoaded, classId]);
 
     const addNote = () => {
         const newNote = {

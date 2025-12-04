@@ -68,7 +68,21 @@ const AttendanceTracker = () => {
     const handleStatusChange = (studentId, status) => {
         const dateKey = selectedDate;
         const tempKey = `${dateKey}_${studentId}`;
+        const currentStatus = getStatus(studentId);
 
+        // If clicking the same status again, remove it (toggle off)
+        if (currentStatus === status) {
+            updateAttendance(dateKey, studentId, null);
+            // Clear the reason from temporary state
+            setReasons(prev => {
+                const newReasons = { ...prev };
+                delete newReasons[tempKey];
+                return newReasons;
+            });
+            return;
+        }
+
+        // Set new status
         if (status === 'sick' || status === 'other') {
             const existingData = attendance[dateKey]?.[studentId];
             const existingReason = typeof existingData === 'object' ? existingData.reason : '';
