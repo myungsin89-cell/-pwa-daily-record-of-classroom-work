@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import Button from '../components/Button';
-import Card from '../components/Card';
 import { useClass } from '../context/ClassContext';
 import { useStudentContext } from '../context/StudentContext';
 import { useSaveStatus } from '../context/SaveStatusContext';
+import './GradeManager.css';
 
 // 기본 평가 기준 템플릿
 const DEFAULT_TEMPLATES = [
@@ -12,12 +12,6 @@ const DEFAULT_TEMPLATES = [
         name: '3단계 (상/중/하)',
         levels: 3,
         labels: ['상', '중', '하']
-    },
-    {
-        id: 'template_3_level_2',
-        name: '3단계 (우수/보통/미흡)',
-        levels: 3,
-        labels: ['우수', '보통', '미흡']
     },
     {
         id: 'template_5_level_1',
@@ -30,12 +24,6 @@ const DEFAULT_TEMPLATES = [
         name: '5단계 (A~E)',
         levels: 5,
         labels: ['A', 'B', 'C', 'D', 'E']
-    },
-    {
-        id: 'template_7_level',
-        name: '7단계 (A+~D)',
-        levels: 7,
-        labels: ['A+', 'A', 'B+', 'B', 'C+', 'C', 'D']
     }
 ];
 
@@ -49,181 +37,250 @@ const GradeManager = () => {
     const [criteriaTemplates, setCriteriaTemplates] = useState([]);
     const [gradeGroups, setGradeGroups] = useState([]);
     const [gradeData, setGradeData] = useState({});
-    const [selectedGroup, setSelectedGroup] = useState('all');
-    const [showInputModal, setShowInputModal] = useState(false);
-    const [currentStep, setCurrentStep] = useState(1); // 1: 설정, 2: 입력
 
-    // 새 성적 입력 폼 상태
-    const [newGrade, setNewGrade] = useState({
+    // View Mode: 'list' | 'detail'
+    const [viewMode, setViewMode] = useState('list');
+    const [activeGradeId, setActiveGradeId] = useState(null);
+
+    // Modal State (Only for Setup now)
+    const [showSetupModal, setShowSetupModal] = useState(false);
+
+    // 새 성적 입력 폼 상태 (Setup & Detail 공유)
+    const [currentGrade, setCurrentGrade] = useState({
+        id: '',
         assessmentName: '',
         groupName: '',
         useExistingCriteria: false,
         selectedCriteriaId: '',
         newCriteriaName: '',
+        evaluationType: 'steps', // 'steps' | 'score'
+        maxScore: 100,
         levels: 5,
         labels: ['매우우수', '우수', '보통', '미흡', '매우미흡'],
-        studentGrades: {}
+        studentGrades: {},
+        createdAt: '',
+        updatedAt: ''
     });
 
-    // 템플릿 선택 상태
-    const [selectedTemplateId, setSelectedTemplateId] = useState('');
-
-    // localStorage에서 데이터 로드
+    // 데이터 초기화 및 로드
     useEffect(() => {
-        const savedTemplates = localStorage.getItem(`grade_criteria_${classId}`);
-        const savedGroups = localStorage.getItem(`grade_groups_${classId}`);
-        const savedGrades = localStorage.getItem(`grade_data_${classId}`);
+        const isCleared = localStorage.getItem(`grade_redesign_cleared_${classId}`);
 
-        if (savedTemplates) {
-            setCriteriaTemplates(JSON.parse(savedTemplates));
-        } else {
+        if (!isCleared) {
+            localStorage.removeItem(`grade_criteria_${classId}`);
+            localStorage.removeItem(`grade_groups_${classId}`);
+            localStorage.removeItem(`grade_data_${classId}`);
+            localStorage.setItem(`grade_redesign_cleared_${classId}`, 'true');
+
             setCriteriaTemplates([...DEFAULT_TEMPLATES]);
-        }
+            setGradeGroups([]);
+            setGradeData({});
+        } else {
+            const savedTemplates = localStorage.getItem(`grade_criteria_${classId}`);
+            const savedGroups = localStorage.getItem(`grade_groups_${classId}`);
+            const savedGrades = localStorage.getItem(`grade_data_${classId}`);
 
-        if (savedGroups) {
-            setGradeGroups(JSON.parse(savedGroups));
-        }
+            if (savedTemplates) setCriteriaTemplates(JSON.parse(savedTemplates));
+            else setCriteriaTemplates([...DEFAULT_TEMPLATES]);
 
-        if (savedGrades) {
-            setGradeData(JSON.parse(savedGrades));
+            if (savedGroups) setGradeGroups(JSON.parse(savedGroups));
+            if (savedGrades) setGradeData(JSON.parse(savedGrades));
         }
     }, [classId]);
 
     // 데이터 저장
     useEffect(() => {
-        localStorage.setItem(`grade_criteria_${classId}`, JSON.stringify(criteriaTemplates));
-        updateSaveStatus();
+        if (localStorage.getItem(`grade_redesign_cleared_${classId}`)) {
+            localStorage.setItem(`grade_criteria_${classId}`, JSON.stringify(criteriaTemplates));
+            updateSaveStatus();
+        }
     }, [criteriaTemplates, classId, updateSaveStatus]);
 
     useEffect(() => {
-        localStorage.setItem(`grade_groups_${classId}`, JSON.stringify(gradeGroups));
-        updateSaveStatus();
+        if (localStorage.getItem(`grade_redesign_cleared_${classId}`)) {
+            localStorage.setItem(`grade_groups_${classId}`, JSON.stringify(gradeGroups));
+            updateSaveStatus();
+        }
     }, [gradeGroups, classId, updateSaveStatus]);
 
     useEffect(() => {
-        localStorage.setItem(`grade_data_${classId}`, JSON.stringify(gradeData));
-        updateSaveStatus();
+        if (localStorage.getItem(`grade_redesign_cleared_${classId}`)) {
+            localStorage.setItem(`grade_data_${classId}`, JSON.stringify(gradeData));
+            updateSaveStatus();
+        }
     }, [gradeData, classId, updateSaveStatus]);
 
-    // 새 성적 입력 시작
+    // --- Actions ---
+
+    // 1. Start New Grade (Open Setup Modal)
     const handleStartNewGrade = () => {
-        setNewGrade({
+        setCurrentGrade({
+            id: '',
             assessmentName: '',
             groupName: '',
             useExistingCriteria: false,
             selectedCriteriaId: '',
             newCriteriaName: '',
+            evaluationType: 'steps',
+            maxScore: 100,
             levels: 5,
             labels: ['매우우수', '우수', '보통', '미흡', '매우미흡'],
-            studentGrades: {}
+            studentGrades: {},
+            createdAt: '',
+            updatedAt: ''
         });
-        setSelectedTemplateId('');
-        setCurrentStep(1);
-        setShowInputModal(true);
+        setShowSetupModal(true);
     };
 
-    // 템플릿 적용
-    const handleApplyTemplate = (templateId) => {
-        const template = [...DEFAULT_TEMPLATES, ...criteriaTemplates].find(t => t.id === templateId);
-        if (template) {
-            setNewGrade(prev => ({
-                ...prev,
-                levels: template.levels,
-                labels: [...template.labels],
-                newCriteriaName: template.name
-            }));
-            setSelectedTemplateId(templateId);
-        }
+    // 2. Open Existing Grade (Switch to Detail View)
+    const handleOpenGrade = (gradeId) => {
+        const grade = gradeData[gradeId];
+        if (!grade) return;
+
+        // Reconstruct currentGrade state from saved data
+        const criteria = criteriaTemplates.find(c => c.id === grade.criteriaId);
+
+        setCurrentGrade({
+            id: grade.id,
+            assessmentName: grade.assessmentName,
+            groupName: grade.groupName,
+            useExistingCriteria: true, // Effectively using existing
+            selectedCriteriaId: grade.criteriaId,
+            newCriteriaName: criteria?.name || '',
+            evaluationType: criteria?.evaluationType || 'steps',
+            maxScore: criteria?.maxScore || 100,
+            levels: criteria?.levels || 5,
+            labels: criteria?.labels || [],
+            studentGrades: grade.studentGrades,
+            createdAt: grade.createdAt,
+            updatedAt: grade.updatedAt
+        });
+
+        setActiveGradeId(gradeId);
+        setViewMode('detail');
     };
 
-    // Step 1 → Step 2
-    const handleNextStep = () => {
-        // 유효성 검사
-        if (!newGrade.assessmentName.trim()) {
-            alert('평가 이름을 입력해주세요.');
-            return;
-        }
-        if (!newGrade.groupName.trim()) {
-            alert('그룹명을 입력해주세요.');
-            return;
-        }
+    // 3. Setup Complete -> Go to Detail View
+    const handleSetupComplete = () => {
+        // Validation
+        if (!currentGrade.assessmentName.trim()) { alert('평가 이름을 입력해주세요.'); return; }
+        if (!currentGrade.groupName.trim()) { alert('그룹명을 입력해주세요.'); return; }
 
-        if (newGrade.useExistingCriteria) {
-            if (!newGrade.selectedCriteriaId) {
-                alert('평가 기준을 선택해주세요.');
-                return;
+        let criteriaId = currentGrade.selectedCriteriaId;
+        let finalLabels = currentGrade.labels;
+        let finalLevels = currentGrade.levels;
+        let finalType = currentGrade.evaluationType;
+        let finalMaxScore = currentGrade.maxScore;
+
+        // Handle Criteria
+        if (currentGrade.useExistingCriteria) {
+            if (!currentGrade.selectedCriteriaId) { alert('평가 기준을 선택해주세요.'); return; }
+            const criteria = criteriaTemplates.find(c => c.id === currentGrade.selectedCriteriaId);
+            if (criteria) {
+                finalType = criteria.evaluationType || 'steps';
+                finalMaxScore = criteria.maxScore || 100;
+                finalLevels = criteria.levels;
+                finalLabels = criteria.labels;
             }
         } else {
-            if (!newGrade.newCriteriaName.trim()) {
-                alert('평가 기준 이름을 입력해주세요.');
-                return;
-            }
-            if (newGrade.labels.some(l => !l.trim())) {
+            if (!currentGrade.newCriteriaName.trim()) { alert('평가 기준 이름을 입력해주세요.'); return; }
+            if (currentGrade.evaluationType === 'steps' && currentGrade.labels.some(l => !l.trim())) {
                 alert('모든 단계 명칭을 입력해주세요.');
                 return;
             }
-        }
 
-        // 학생별 초기 성적 설정 (모두 중간값으로)
-        const initialGrades = {};
-        students.forEach(student => {
-            initialGrades[student.id] = Math.ceil(newGrade.levels / 2);
-        });
-        setNewGrade(prev => ({ ...prev, studentGrades: initialGrades }));
-
-        setCurrentStep(2);
-    };
-
-    // 성적 저장
-    const handleSaveGrade = () => {
-        // 평가 기준 저장 (새로 만든 경우)
-        let criteriaId = newGrade.selectedCriteriaId;
-        if (!newGrade.useExistingCriteria) {
+            // Create New Criteria Immediately
             const newCriteria = {
                 id: `criteria_${Date.now()}`,
-                name: newGrade.newCriteriaName,
-                levels: newGrade.levels,
-                labels: newGrade.labels,
+                name: currentGrade.newCriteriaName,
+                evaluationType: currentGrade.evaluationType,
+                maxScore: currentGrade.maxScore,
+                levels: currentGrade.levels,
+                labels: currentGrade.labels,
                 isCustom: true
             };
             setCriteriaTemplates(prev => [...prev, newCriteria]);
             criteriaId = newCriteria.id;
         }
 
-        // 그룹 저장 (없으면 생성)
-        let group = gradeGroups.find(g => g.name === newGrade.groupName);
+        // Handle Group
+        let group = gradeGroups.find(g => g.name === currentGrade.groupName);
         if (!group) {
             group = {
                 id: `group_${Date.now()}`,
-                name: newGrade.groupName,
+                name: currentGrade.groupName,
                 createdAt: new Date().toISOString()
             };
             setGradeGroups(prev => [...prev, group]);
         }
 
-        // 성적 데이터 저장
-        const gradeRecord = {
-            id: `grade_${Date.now()}`,
-            assessmentName: newGrade.assessmentName,
+        // Initialize Grades
+        const initialGrades = {};
+        students.forEach(student => {
+            if (finalType === 'score') {
+                initialGrades[student.id] = 0;
+            } else {
+                initialGrades[student.id] = Math.ceil(finalLevels / 2);
+            }
+        });
+
+        // Update State for Detail View
+        const newGradeId = `grade_${Date.now()}`;
+        const newGradeRecord = {
+            id: newGradeId,
+            assessmentName: currentGrade.assessmentName,
             groupId: group.id,
             groupName: group.name,
             criteriaId: criteriaId,
-            studentGrades: newGrade.studentGrades,
+            studentGrades: initialGrades,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
         };
 
-        setGradeData(prev => ({
-            ...prev,
-            [gradeRecord.id]: gradeRecord
-        }));
+        // Save initial record
+        setGradeData(prev => ({ ...prev, [newGradeId]: newGradeRecord }));
 
-        setShowInputModal(false);
-        alert('✅ 성적이 저장되었습니다!');
+        // Update currentGrade state for the view
+        setCurrentGrade({
+            ...currentGrade,
+            id: newGradeId,
+            selectedCriteriaId: criteriaId,
+            evaluationType: finalType,
+            maxScore: finalMaxScore,
+            levels: finalLevels,
+            labels: finalLabels,
+            studentGrades: initialGrades
+        });
+
+        setShowSetupModal(false);
+        setActiveGradeId(newGradeId);
+        setViewMode('detail');
     };
 
-    // 성적 삭제
-    const handleDeleteGrade = (gradeId) => {
+    // 4. Save & Exit / Save
+    const handleSave = (exit = false) => {
+        if (!activeGradeId) return;
+
+        setGradeData(prev => ({
+            ...prev,
+            [activeGradeId]: {
+                ...prev[activeGradeId],
+                studentGrades: currentGrade.studentGrades,
+                updatedAt: new Date().toISOString()
+            }
+        }));
+
+        if (exit) {
+            setViewMode('list');
+            setActiveGradeId(null);
+        } else {
+            alert('✅ 저장되었습니다.');
+        }
+    };
+
+    // 5. Delete Grade
+    const handleDeleteGrade = (e, gradeId) => {
+        e.stopPropagation();
         if (!window.confirm('이 성적을 삭제하시겠습니까?')) return;
 
         setGradeData(prev => {
@@ -233,749 +290,440 @@ const GradeManager = () => {
         });
     };
 
-    // 그룹 필터링
-    const filteredGrades = Object.values(gradeData).filter(grade => {
-        if (selectedGroup === 'all') return true;
-        return grade.groupId === selectedGroup;
-    });
+    // 6. Delete Criteria
+    const handleDeleteCriteria = (criteriaId) => {
+        if (!window.confirm('이 평가 기준을 삭제하시겠습니까? 이 기준을 사용하는 성적 데이터에는 영향을 주지 않습니다.')) return;
 
-    // 평가 기준 정보 가져오기
-    const getCriteriaInfo = (criteriaId) => {
-        return criteriaTemplates.find(c => c.id === criteriaId);
+        setCriteriaTemplates(prev => prev.filter(c => c.id !== criteriaId));
+        if (currentGrade.selectedCriteriaId === criteriaId) {
+            setCurrentGrade(prev => ({ ...prev, selectedCriteriaId: '' }));
+        }
     };
 
-    // 학생별 성적 변경
-    const handleStudentGradeChange = (studentId, grade) => {
-        setNewGrade(prev => ({
+    // 7. Create Group
+    const handleAddGroup = () => {
+        const name = prompt('새로운 그룹 이름을 입력하세요:');
+        if (!name || !name.trim()) return;
+
+        if (gradeGroups.some(g => g.name === name.trim())) {
+            alert('이미 존재하는 그룹 이름입니다.');
+            return;
+        }
+
+        const newGroup = {
+            id: `group_${Date.now()}`,
+            name: name.trim(),
+            createdAt: new Date().toISOString()
+        };
+        setGradeGroups(prev => [...prev, newGroup]);
+    };
+
+    // 8. Drag and Drop
+    const handleDragStart = (e, gradeId) => {
+        e.dataTransfer.setData('text/plain', gradeId);
+        e.dataTransfer.effectAllowed = 'move';
+        // Add a class to the dragged element for styling
+        e.target.classList.add('dragging');
+    };
+
+    const handleDragEnd = (e) => {
+        e.target.classList.remove('dragging');
+        // Remove drag-over class from all sections
+        document.querySelectorAll('.grade-section').forEach(el => {
+            el.classList.remove('drag-over');
+        });
+    };
+
+    const handleDragOver = (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        e.currentTarget.classList.add('drag-over');
+    };
+
+    const handleDragLeave = (e) => {
+        e.currentTarget.classList.remove('drag-over');
+    };
+
+    const handleDrop = (e, targetGroupId) => {
+        e.preventDefault();
+        e.currentTarget.classList.remove('drag-over');
+        const gradeId = e.dataTransfer.getData('text/plain');
+
+        if (!gradeId) return;
+
+        setGradeData(prev => ({
             ...prev,
-            studentGrades: {
-                ...prev.studentGrades,
-                [studentId]: parseInt(grade)
+            [gradeId]: {
+                ...prev[gradeId],
+                groupId: targetGroupId,
+                updatedAt: new Date().toISOString()
             }
         }));
     };
 
-    // 단계 레이블 변경
+    // --- Helpers ---
+    const handleStudentGradeChange = (studentId, value) => {
+        setCurrentGrade(prev => ({
+            ...prev,
+            studentGrades: {
+                ...prev.studentGrades,
+                [studentId]: parseInt(value) || 0
+            }
+        }));
+    };
+
+    const handleLevelsChange = (levels) => {
+        const newLevels = parseInt(levels);
+        const newLabels = Array(newLevels).fill('').map((_, i) => {
+            if (i < currentGrade.labels.length) return currentGrade.labels[i];
+            return '';
+        });
+        setCurrentGrade(prev => ({ ...prev, levels: newLevels, labels: newLabels }));
+    };
+
     const handleLabelChange = (index, value) => {
-        setNewGrade(prev => {
+        setCurrentGrade(prev => {
             const newLabels = [...prev.labels];
             newLabels[index] = value;
             return { ...prev, labels: newLabels };
         });
     };
 
-    // 단계 수 변경
-    const handleLevelsChange = (levels) => {
-        const newLevels = parseInt(levels);
-        const newLabels = Array(newLevels).fill('').map((_, i) => {
-            if (i < newGrade.labels.length) {
-                return newGrade.labels[i];
-            }
-            return '';
-        });
-        setNewGrade(prev => ({
-            ...prev,
-            levels: newLevels,
-            labels: newLabels
-        }));
-    };
+    const grades = Object.values(gradeData);
+
+    // --- Render ---
+
+    if (viewMode === 'detail') {
+        return (
+            <div className="grade-manager detail-view">
+                <div className="detail-header">
+                    <div className="detail-title-group">
+                        <Button variant="secondary" onClick={() => setViewMode('list')} className="back-btn">
+                            ← 목록으로
+                        </Button>
+                        <div>
+                            <h1>{currentGrade.assessmentName}</h1>
+                            <span className="detail-subtitle">
+                                {currentGrade.groupName} • {currentGrade.evaluationType === 'score' ? `${currentGrade.maxScore}점 만점` : `${currentGrade.levels}단계 평가`}
+                            </span>
+                        </div>
+                    </div>
+                    <div className="detail-actions">
+                        <Button variant="secondary" onClick={() => handleSave(false)}>중간 저장</Button>
+                        <Button variant="primary" onClick={() => handleSave(true)}>저장하고 나가기</Button>
+                    </div>
+                </div>
+
+                <div className="grade-table-container full-page">
+                    <table className="grade-table">
+                        <thead>
+                            <tr>
+                                <th style={{ width: '80px' }}>번호</th>
+                                <th style={{ width: '120px' }}>이름</th>
+                                <th>평가 입력</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {students.sort((a, b) => a.attendanceNumber - b.attendanceNumber).map(student => {
+                                const gradeValue = currentGrade.studentGrades[student.id];
+
+                                return (
+                                    <tr key={student.id}>
+                                        <td>{student.attendanceNumber}</td>
+                                        <td>{student.name}</td>
+                                        <td>
+                                            {currentGrade.evaluationType === 'score' ? (
+                                                <input
+                                                    type="number"
+                                                    className="form-input grade-input-number"
+                                                    value={gradeValue}
+                                                    onChange={(e) => handleStudentGradeChange(student.id, e.target.value)}
+                                                    max={currentGrade.maxScore}
+                                                    min="0"
+                                                />
+                                            ) : (
+                                                <div className="grade-radio-group">
+                                                    {currentGrade.labels.map((label, index) => {
+                                                        const val = currentGrade.labels.length - index;
+                                                        return (
+                                                            <label key={index} className={`grade-radio-item ${gradeValue === val ? 'selected' : ''}`}>
+                                                                <input
+                                                                    type="radio"
+                                                                    name={`grade-${student.id}`}
+                                                                    value={val}
+                                                                    checked={gradeValue === val}
+                                                                    onChange={() => handleStudentGradeChange(student.id, val)}
+                                                                />
+                                                                {label}
+                                                            </label>
+                                                        );
+                                                    })}
+                                                </div>
+                                            )}
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="grade-manager">
-            <div className="flex justify-between items-center mb-lg">
+            <div className="grade-header">
                 <h1>📊 학생 성적 관리</h1>
-                <Button variant="primary" onClick={handleStartNewGrade}>
-                    + 새 성적 입력
-                </Button>
+                <div className="header-actions">
+                    <Button variant="secondary" onClick={handleAddGroup}>
+                        + 그룹 추가
+                    </Button>
+                    <Button variant="primary" onClick={handleStartNewGrade}>
+                        + 새 성적 입력
+                    </Button>
+                </div>
             </div>
 
-            {/* 그룹 필터 */}
-            <div className="grade-filter mb-md">
-                <label>그룹 선택: </label>
-                <select
-                    value={selectedGroup}
-                    onChange={(e) => setSelectedGroup(e.target.value)}
-                    className="grade-group-select"
-                >
-                    <option value="all">전체</option>
-                    {gradeGroups.map(group => (
-                        <option key={group.id} value={group.id}>{group.name}</option>
-                    ))}
-                </select>
-            </div>
-
-            {/* 성적 목록 */}
-            {filteredGrades.length === 0 ? (
-                <Card>
-                    <p className="text-muted" style={{ textAlign: 'center', padding: '2rem' }}>
-                        등록된 성적이 없습니다. "새 성적 입력" 버튼을 눌러 시작하세요.
-                    </p>
-                </Card>
-            ) : (
-                <Card className="grade-list-container">
-                    <div className="grade-list-table-wrapper">
-                        <table className="grade-list-table">
-                            <thead>
-                                <tr>
-                                    <th>평가 이름</th>
-                                    <th>그룹</th>
-                                    <th>평가 기준</th>
-                                    <th>작성일</th>
-                                    <th style={{ width: '150px', textAlign: 'center' }}>관리</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {filteredGrades.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).map(grade => {
-                                    const criteria = getCriteriaInfo(grade.criteriaId);
-                                    return (
-                                        <tr key={grade.id}>
-                                            <td>
-                                                <strong>{grade.assessmentName}</strong>
-                                            </td>
-                                            <td>
-                                                <span className="grade-group-badge">
-                                                    📁 {grade.groupName}
-                                                </span>
-                                            </td>
-                                            <td>
-                                                <span className="grade-criteria-badge">
-                                                    {criteria?.name || '알 수 없음'}
-                                                </span>
-                                            </td>
-                                            <td className="text-muted">
-                                                {new Date(grade.createdAt).toLocaleDateString('ko-KR', {
-                                                    year: 'numeric',
-                                                    month: 'long',
-                                                    day: 'numeric'
-                                                })}
-                                            </td>
-                                            <td className="grade-actions-cell">
-                                                <div className="grade-actions">
-                                                    <button className="grade-action-btn view-btn" title="보기">
-                                                        👁️
-                                                    </button>
-                                                    <button
-                                                        className="grade-action-btn delete-btn"
-                                                        onClick={() => handleDeleteGrade(grade.id)}
-                                                        title="삭제"
-                                                    >
-                                                        🗑️
-                                                    </button>
-                                                </div>
-                                            </td>
-                                        </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </table>
+            <div className="grade-sections">
+                {gradeGroups.length === 0 ? (
+                    <div className="empty-state">
+                        <span className="empty-state-icon">📝</span>
+                        <p>아직 등록된 성적이 없습니다.</p>
+                        <p>새 성적 입력 버튼을 눌러 시작해보세요!</p>
                     </div>
-                </Card>
-            )}
+                ) : (
+                    gradeGroups.map(group => {
+                        const groupGrades = grades.filter(g => g.groupId === group.id)
+                            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-            {/* 성적 입력 모달 */}
-            {showInputModal && (
-                <div className="grade-modal-overlay" onClick={() => setShowInputModal(false)}>
-                    <div className="grade-modal-content" onClick={(e) => e.stopPropagation()}>
-                        <button
-                            className="grade-modal-close"
-                            onClick={() => setShowInputModal(false)}
-                            title="닫기"
-                        >
-                            ×
-                        </button>
+                        if (groupGrades.length === 0) return null;
 
-                        {currentStep === 1 ? (
-                            /* Step 1: 설정 */
-                            <div className="grade-setup-step">
-                                <h2>📝 성적 입력 - 설정</h2>
-
-                                {/* 평가 이름 */}
-                                <div className="form-group">
-                                    <label className="form-label">평가 이름 *</label>
-                                    <input
-                                        type="text"
-                                        className="form-input"
-                                        placeholder="예: 1학기 중간고사, 수행평가 1차"
-                                        value={newGrade.assessmentName}
-                                        onChange={(e) => setNewGrade({ ...newGrade, assessmentName: e.target.value })}
-                                    />
+                        return (
+                            <div
+                                key={group.id}
+                                className="grade-section"
+                                onDragOver={handleDragOver}
+                                onDragLeave={handleDragLeave}
+                                onDrop={(e) => handleDrop(e, group.id)}
+                            >
+                                <div className="grade-section-header">
+                                    <div className="grade-section-title">
+                                        {group.name}
+                                        <span className="grade-section-count">{groupGrades.length}</span>
+                                    </div>
                                 </div>
+                                <div className="grade-grid">
+                                    {groupGrades.map(grade => {
+                                        const criteria = criteriaTemplates.find(c => c.id === grade.criteriaId);
+                                        const isScoreType = criteria?.evaluationType === 'score';
 
-                                {/* 그룹명 */}
-                                <div className="form-group">
-                                    <label className="form-label">그룹명 *</label>
-                                    <input
-                                        type="text"
+                                        return (
+                                            <div
+                                                key={grade.id}
+                                                className="grade-card"
+                                                draggable
+                                                onDragStart={(e) => handleDragStart(e, grade.id)}
+                                                onDragEnd={handleDragEnd}
+                                                onClick={() => handleOpenGrade(grade.id)}
+                                            >
+                                                <div className="grade-card-header">
+                                                    <div className="grade-card-title">{grade.assessmentName}</div>
+                                                    <div className={`grade-card-badge ${isScoreType ? 'score' : 'steps'}`}>
+                                                        {isScoreType ? '점수제' : `${criteria?.levels || 5}단계`}
+                                                    </div>
+                                                </div>
+                                                <div className="grade-card-meta">
+                                                    <span>{new Date(grade.createdAt).toLocaleDateString()}</span>
+                                                    <span>{Object.keys(grade.studentGrades).length}명</span>
+                                                </div>
+                                                <button
+                                                    className="grade-card-delete"
+                                                    onClick={(e) => handleDeleteGrade(e, grade.id)}
+                                                    title="삭제"
+                                                >
+                                                    ×
+                                                </button>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            </div>
+                        );
+                    })
+                )}
+            </div>
+
+            {/* Setup Modal */}
+            {showSetupModal && (
+                <div className="grade-modal-overlay" onClick={() => setShowSetupModal(false)}>
+                    <div className="grade-modal-content setup-modal" onClick={(e) => e.stopPropagation()}>
+                        <button className="grade-modal-close" onClick={() => setShowSetupModal(false)}>×</button>
+
+                        <h2 className="grade-modal-title">새 성적 설정</h2>
+
+                        <div className="form-section">
+                            <label className="form-label">평가 이름</label>
+                            <input
+                                type="text"
+                                className="form-input"
+                                placeholder="예: 1학기 중간고사"
+                                value={currentGrade.assessmentName}
+                                onChange={(e) => setCurrentGrade({ ...currentGrade, assessmentName: e.target.value })}
+                            />
+                        </div>
+
+                        <div className="form-section">
+                            <label className="form-label">그룹 (과목/분류)</label>
+                            <input
+                                type="text"
+                                className="form-input"
+                                placeholder="예: 국어, 수학"
+                                value={currentGrade.groupName}
+                                onChange={(e) => setCurrentGrade({ ...currentGrade, groupName: e.target.value })}
+                                list="existing-groups"
+                            />
+                            <div className="group-chips">
+                                {gradeGroups.map(group => (
+                                    <button
+                                        key={group.id}
+                                        className={`group-chip ${currentGrade.groupName === group.name ? 'active' : ''}`}
+                                        onClick={() => setCurrentGrade({ ...currentGrade, groupName: group.name })}
+                                    >
+                                        {group.name}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        <div className="form-section">
+                            <label className="form-label">평가 기준 설정</label>
+                            <div className="type-selector">
+                                <div
+                                    className={`type-card ${!currentGrade.useExistingCriteria ? 'active' : ''}`}
+                                    onClick={() => setCurrentGrade({ ...currentGrade, useExistingCriteria: false })}
+                                >
+                                    <span className="type-icon">✨</span>
+                                    <span className="type-title">새 기준 만들기</span>
+                                </div>
+                                <div
+                                    className={`type-card ${currentGrade.useExistingCriteria ? 'active' : ''}`}
+                                    onClick={() => setCurrentGrade({ ...currentGrade, useExistingCriteria: true })}
+                                >
+                                    <span className="type-icon">📋</span>
+                                    <span className="type-title">기존 기준 사용</span>
+                                </div>
+                            </div>
+
+                            {currentGrade.useExistingCriteria ? (
+                                <div className="criteria-select-container">
+                                    <select
                                         className="form-input"
-                                        placeholder="예: 국어, 수학, 영어"
-                                        value={newGrade.groupName}
-                                        onChange={(e) => setNewGrade({ ...newGrade, groupName: e.target.value })}
-                                        list="existing-groups"
-                                    />
-                                    <datalist id="existing-groups">
-                                        {gradeGroups.map(group => (
-                                            <option key={group.id} value={group.name} />
+                                        value={currentGrade.selectedCriteriaId}
+                                        onChange={(e) => setCurrentGrade({ ...currentGrade, selectedCriteriaId: e.target.value })}
+                                    >
+                                        <option value="">평가 기준 선택...</option>
+                                        {criteriaTemplates.map(criteria => (
+                                            <option key={criteria.id} value={criteria.id}>
+                                                {criteria.name} ({criteria.evaluationType === 'score' ? '점수제' : `${criteria.levels}단계`})
+                                            </option>
                                         ))}
-                                    </datalist>
+                                    </select>
+                                    {currentGrade.selectedCriteriaId && criteriaTemplates.find(c => c.id === currentGrade.selectedCriteriaId)?.isCustom && (
+                                        <button
+                                            className="criteria-delete-btn"
+                                            onClick={() => handleDeleteCriteria(currentGrade.selectedCriteriaId)}
+                                            title="이 기준 삭제"
+                                        >
+                                            삭제
+                                        </button>
+                                    )}
                                 </div>
-
-                                {/* 평가 기준 선택 */}
-                                <div className="form-group">
-                                    <label className="form-label">평가 기준 *</label>
-                                    <div className="radio-group">
-                                        <label>
-                                            <input
-                                                type="radio"
-                                                checked={newGrade.useExistingCriteria}
-                                                onChange={() => setNewGrade({ ...newGrade, useExistingCriteria: true })}
-                                            />
-                                            기존 기준 사용
-                                        </label>
-                                        <label>
-                                            <input
-                                                type="radio"
-                                                checked={!newGrade.useExistingCriteria}
-                                                onChange={() => setNewGrade({ ...newGrade, useExistingCriteria: false })}
-                                            />
-                                            새 기준 만들기
-                                        </label>
+                            ) : (
+                                <div className="new-criteria-form">
+                                    {/* ... Same New Criteria Form ... */}
+                                    <div className="form-section">
+                                        <label className="form-label">평가 방식</label>
+                                        <div className="type-selector compact">
+                                            <div
+                                                className={`type-card ${currentGrade.evaluationType === 'steps' ? 'active' : ''}`}
+                                                onClick={() => setCurrentGrade({ ...currentGrade, evaluationType: 'steps' })}
+                                            >
+                                                <span className="type-title">단계별 평가</span>
+                                            </div>
+                                            <div
+                                                className={`type-card ${currentGrade.evaluationType === 'score' ? 'active' : ''}`}
+                                                onClick={() => setCurrentGrade({ ...currentGrade, evaluationType: 'score' })}
+                                            >
+                                                <span className="type-title">점수제</span>
+                                            </div>
+                                        </div>
                                     </div>
 
-                                    {newGrade.useExistingCriteria ? (
-                                        <select
+                                    <div className="form-section">
+                                        <label className="form-label">기준 이름</label>
+                                        <input
+                                            type="text"
                                             className="form-input"
-                                            value={newGrade.selectedCriteriaId}
-                                            onChange={(e) => setNewGrade({ ...newGrade, selectedCriteriaId: e.target.value })}
-                                        >
-                                            <option value="">선택하세요</option>
-                                            {criteriaTemplates.map(criteria => (
-                                                <option key={criteria.id} value={criteria.id}>
-                                                    {criteria.name} ({criteria.levels}단계)
-                                                </option>
-                                            ))}
-                                        </select>
-                                    ) : (
+                                            placeholder="예: 5단계 평가"
+                                            value={currentGrade.newCriteriaName}
+                                            onChange={(e) => setCurrentGrade({ ...currentGrade, newCriteriaName: e.target.value })}
+                                        />
+                                    </div>
+
+                                    {currentGrade.evaluationType === 'steps' ? (
                                         <>
-                                            {/* 템플릿 선택 */}
-                                            <div className="template-selector">
-                                                <label className="form-label" style={{ fontSize: '0.9rem', marginBottom: '0.5rem' }}>
-                                                    💡 템플릿에서 선택 (선택사항)
-                                                </label>
-                                                <select
-                                                    className="form-input"
-                                                    value={selectedTemplateId}
-                                                    onChange={(e) => handleApplyTemplate(e.target.value)}
-                                                >
-                                                    <option value="">직접 입력</option>
-                                                    {DEFAULT_TEMPLATES.map(template => (
-                                                        <option key={template.id} value={template.id}>
-                                                            {template.name}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-
-                                            {/* 기준명 */}
-                                            <input
-                                                type="text"
-                                                className="form-input"
-                                                placeholder="평가 기준 이름 (예: 5단계 평가)"
-                                                value={newGrade.newCriteriaName}
-                                                onChange={(e) => setNewGrade({ ...newGrade, newCriteriaName: e.target.value })}
-                                                style={{ marginTop: '0.5rem' }}
-                                            />
-
-                                            {/* 단계 수 */}
-                                            <div style={{ marginTop: '0.5rem' }}>
+                                            <div className="form-section">
                                                 <label className="form-label">단계 수</label>
                                                 <select
                                                     className="form-input"
-                                                    value={newGrade.levels}
+                                                    value={currentGrade.levels}
                                                     onChange={(e) => handleLevelsChange(e.target.value)}
                                                 >
                                                     <option value="3">3단계</option>
                                                     <option value="5">5단계</option>
                                                     <option value="7">7단계</option>
-                                                    <option value="9">9단계</option>
                                                 </select>
                                             </div>
-
-                                            {/* 단계별 명칭 */}
-                                            <div style={{ marginTop: '0.75rem' }}>
-                                                <label className="form-label">각 단계 명칭</label>
-                                                {newGrade.labels.map((label, index) => (
-                                                    <input
-                                                        key={index}
-                                                        type="text"
-                                                        className="form-input"
-                                                        placeholder={`${newGrade.levels - index}단계`}
-                                                        value={label}
-                                                        onChange={(e) => handleLabelChange(index, e.target.value)}
-                                                        style={{ marginTop: '0.25rem' }}
-                                                    />
-                                                ))}
+                                            <div className="form-section">
+                                                <label className="form-label">단계 명칭</label>
+                                                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                    {currentGrade.labels.map((label, index) => (
+                                                        <input
+                                                            key={index}
+                                                            type="text"
+                                                            className="form-input"
+                                                            style={{ width: 'auto', flex: 1, minWidth: '80px' }}
+                                                            value={label}
+                                                            onChange={(e) => handleLabelChange(index, e.target.value)}
+                                                            placeholder={`${currentGrade.levels - index}단계`}
+                                                        />
+                                                    ))}
+                                                </div>
                                             </div>
                                         </>
+                                    ) : (
+                                        <div className="form-section">
+                                            <label className="form-label">만점 점수</label>
+                                            <input
+                                                type="number"
+                                                className="form-input"
+                                                value={currentGrade.maxScore}
+                                                onChange={(e) => setCurrentGrade({ ...currentGrade, maxScore: parseInt(e.target.value) || 100 })}
+                                            />
+                                        </div>
                                     )}
                                 </div>
+                            )}
+                        </div>
 
-                                <div className="flex justify-end gap-sm" style={{ marginTop: '1.5rem' }}>
-                                    <Button variant="secondary" onClick={() => setShowInputModal(false)}>
-                                        취소
-                                    </Button>
-                                    <Button variant="primary" onClick={handleNextStep}>
-                                        다음 →
-                                    </Button>
-                                </div>
-                            </div>
-                        ) : (
-                            /* Step 2: 명렬표 입력 */
-                            <div className="grade-input-step">
-                                <h2>📝 성적 입력 - {newGrade.assessmentName}</h2>
-                                <p className="text-muted" style={{ marginBottom: '1rem' }}>
-                                    평가: {newGrade.useExistingCriteria
-                                        ? getCriteriaInfo(newGrade.selectedCriteriaId)?.name
-                                        : newGrade.newCriteriaName}
-                                </p>
-
-                                <div className="grade-table-container">
-                                    <table className="grade-table">
-                                        <thead>
-                                            <tr>
-                                                <th>번호</th>
-                                                <th>이름</th>
-                                                <th>성별</th>
-                                                <th>평가</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {students.sort((a, b) => a.attendanceNumber - b.attendanceNumber).map(student => {
-                                                const currentGrade = newGrade.studentGrades[student.id] || Math.ceil(newGrade.levels / 2);
-                                                const labels = newGrade.useExistingCriteria
-                                                    ? getCriteriaInfo(newGrade.selectedCriteriaId)?.labels
-                                                    : newGrade.labels;
-
-                                                return (
-                                                    <tr key={student.id}>
-                                                        <td>{student.attendanceNumber}</td>
-                                                        <td>{student.name}</td>
-                                                        <td>{student.gender}</td>
-                                                        <td>
-                                                            <select
-                                                                className="grade-select"
-                                                                value={currentGrade}
-                                                                onChange={(e) => handleStudentGradeChange(student.id, e.target.value)}
-                                                            >
-                                                                {labels.map((label, index) => (
-                                                                    <option key={index} value={labels.length - index}>
-                                                                        {labels.length - index}단계 - {label}
-                                                                    </option>
-                                                                ))}
-                                                            </select>
-                                                        </td>
-                                                    </tr>
-                                                );
-                                            })}
-                                        </tbody>
-                                    </table>
-                                </div>
-
-                                <p className="text-muted" style={{ fontSize: '0.85rem', marginTop: '1rem' }}>
-                                    💡 Tip: Tab 키로 빠르게 이동할 수 있습니다
-                                </p>
-
-                                <div className="flex justify-between" style={{ marginTop: '1.5rem' }}>
-                                    <Button variant="secondary" onClick={() => setCurrentStep(1)}>
-                                        ← 이전
-                                    </Button>
-                                    <Button variant="primary" onClick={handleSaveGrade}>
-                                        💾 저장하고 나가기
-                                    </Button>
-                                </div>
-                            </div>
-                        )}
+                        <div className="flex justify-end gap-sm" style={{ marginTop: '2rem' }}>
+                            <Button variant="secondary" onClick={() => setShowSetupModal(false)}>취소</Button>
+                            <Button variant="primary" onClick={handleSetupComplete}>입력 시작 →</Button>
+                        </div>
                     </div>
                 </div>
             )}
-
-            <style>{`
-                .grade-manager {
-                    padding: 2rem;
-                    max-width: 1200px;
-                    margin: 0 auto;
-                }
-
-                .grade-filter {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                }
-
-                .grade-group-select {
-                    padding: 0.5rem 1rem;
-                    border: 1px solid var(--color-border);
-                    border-radius: var(--radius-sm);
-                    font-size: 1rem;
-                    outline: none;
-                }
-
-                .grade-group-select:focus {
-                    border-color: var(--color-primary);
-                    box-shadow: 0 0 0 2px var(--color-primary-light);
-                }
-
-                /* Grade List Table */
-                .grade-list-container {
-                    overflow: hidden;
-                }
-
-                .grade-list-table-wrapper {
-                    overflow-x: auto;
-                }
-
-                .grade-list-table {
-                    width: 100%;
-                    border-collapse: collapse;
-                }
-
-                .grade-list-table thead {
-                    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
-                }
-
-                .grade-list-table th {
-                    padding: 1rem;
-                    text-align: left;
-                    font-weight: 700;
-                    color: #334155;
-                    border-bottom: 2px solid #cbd5e1;
-                    font-size: 0.95rem;
-                }
-
-                .grade-list-table td {
-                    padding: 1rem;
-                    border-bottom: 1px solid #e5e7eb;
-                    vertical-align: middle;
-                }
-
-                .grade-list-table tbody tr {
-                    transition: background-color 0.2s;
-                }
-
-                .grade-list-table tbody tr:hover {
-                    background-color: #f8fafc;
-                }
-
-                .grade-list-table tbody tr:last-child td {
-                    border-bottom: none;
-                }
-
-                .grade-group-badge {
-                    display: inline-block;
-                    padding: 0.25rem 0.75rem;
-                    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
-                    color: #1e40af;
-                    border-radius: 12px;
-                    font-size: 0.85rem;
-                    font-weight: 600;
-                }
-
-                .grade-criteria-badge {
-                    display: inline-block;
-                    padding: 0.25rem 0.75rem;
-                    background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
-                    color: #92400e;
-                    border-radius: 12px;
-                    font-size: 0.85rem;
-                    font-weight: 600;
-                }
-
-                .grade-actions-cell {
-                    text-align: center;
-                }
-
-                .grade-actions {
-                    display: flex;
-                    gap: 0.5rem;
-                    justify-content: center;
-                }
-
-                .grade-action-btn {
-                    background: none;
-                    border: 1px solid var(--color-border);
-                    padding: 0.5rem;
-                    border-radius: var(--radius-sm);
-                    cursor: pointer;
-                    font-size: 1.2rem;
-                    transition: all 0.2s;
-                    width: 40px;
-                    height: 40px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                }
-
-                .grade-action-btn:hover {
-                    transform: translateY(-2px);
-                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-                }
-
-                .grade-action-btn.view-btn:hover {
-                    background: #dbeafe;
-                    border-color: #60a5fa;
-                }
-
-                .grade-action-btn.delete-btn:hover {
-                    background: #fee2e2;
-                    border-color: #f87171;
-                }
-
-                /* Modal Styles */
-                .grade-modal-overlay {
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background-color: rgba(0, 0, 0, 0.5);
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    z-index: 1000;
-                    animation: fadeIn 0.2s ease-out;
-                }
-
-                .grade-modal-content {
-                    position: relative;
-                    background: white;
-                    border-radius: var(--radius-lg);
-                    padding: 2rem;
-                    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-                    max-width: 800px;
-                    max-height: 90vh;
-                    overflow-y: auto;
-                    width: 90vw;
-                    animation: slideUp 0.3s ease-out;
-                }
-
-                .grade-modal-close {
-                    position: absolute;
-                    top: 1rem;
-                    right: 1rem;
-                    background: none;
-                    border: none;
-                    font-size: 2rem;
-                    cursor: pointer;
-                    color: var(--color-text-muted);
-                    line-height: 1;
-                    padding: 0.25rem;
-                    width: 32px;
-                    height: 32px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    border-radius: 4px;
-                    transition: background-color 0.2s, color 0.2s;
-                }
-
-                .grade-modal-close:hover {
-                    background-color: #f1f5f9;
-                    color: var(--color-text);
-                }
-
-                .form-group {
-                    margin-bottom: 1.5rem;
-                }
-
-                .form-label {
-                    display: block;
-                    margin-bottom: 0.5rem;
-                    font-weight: 600;
-                    color: var(--color-text);
-                }
-
-                .form-input {
-                    width: 100%;
-                    padding: 0.75rem;
-                    border: 1px solid var(--color-border);
-                    border-radius: var(--radius-sm);
-                    font-size: 1rem;
-                    outline: none;
-                    transition: border-color 0.2s, box-shadow 0.2s;
-                }
-
-                .form-input:focus {
-                    border-color: var(--color-primary);
-                    box-shadow: 0 0 0 2px var(--color-primary-light);
-                }
-
-                .radio-group {
-                    display: flex;
-                    gap: 1rem;
-                    margin-bottom: 1rem;
-                }
-
-                .radio-group label {
-                    display: flex;
-                    align-items: center;
-                    gap: 0.5rem;
-                    cursor: pointer;
-                }
-
-                .template-selector {
-                    margin-bottom: 0.75rem;
-                }
-
-                /* Grade Table */
-                .grade-table-container {
-                    max-height: 400px;
-                    overflow-y: auto;
-                    border: 1px solid var(--color-border);
-                    border-radius: var(--radius-sm);
-                }
-
-                .grade-table {
-                    width: 100%;
-                    border-collapse: collapse;
-                }
-
-                .grade-table thead {
-                    position: sticky;
-                    top: 0;
-                    background: #f8fafc;
-                    z-index: 10;
-                }
-
-                .grade-table th {
-                    padding: 0.75rem;
-                    text-align: left;
-                    font-weight: 600;
-                    border-bottom: 2px solid var(--color-border);
-                }
-
-                .grade-table td {
-                    padding: 0.75rem;
-                    border-bottom: 1px solid #e5e7eb;
-                }
-
-                .grade-table tbody tr:hover {
-                    background-color: #f8fafc;
-                }
-
-                .grade-select {
-                    width: 100%;
-                    padding: 0.5rem;
-                    border: 1px solid var(--color-border);
-                    border-radius: var(--radius-sm);
-                    font-size: 0.95rem;
-                    outline: none;
-                }
-
-                .grade-select:focus {
-                    border-color: var(--color-primary);
-                    box-shadow: 0 0 0 2px var(--color-primary-light);
-                }
-
-                @media (max-width: 768px) {
-                    .grade-manager {
-                        padding: 1rem;
-                    }
-
-                    .grade-list-table th,
-                    .grade-list-table td {
-                        padding: 0.75rem 0.5rem;
-                        font-size: 0.9rem;
-                    }
-
-                    .grade-group-badge,
-                    .grade-criteria-badge {
-                        font-size: 0.75rem;
-                        padding: 0.2rem 0.5rem;
-                    }
-
-                    .grade-action-btn {
-                        width: 36px;
-                        height: 36px;
-                        font-size: 1rem;
-                    }
-                }
-
-                @media (max-width: 640px) {
-                    .grade-manager {
-                        padding: 1rem;
-                    }
-
-                    .grade-modal-content {
-                        padding: 1.5rem;
-                        width: 95vw;
-                    }
-
-                    /* 모바일에서 테이블을 카드 형식으로 변경 */
-                    .grade-list-table thead {
-                        display: none;
-                    }
-
-                    .grade-list-table,
-                    .grade-list-table tbody,
-                    .grade-list-table tr,
-                    .grade-list-table td {
-                        display: block;
-                        width: 100%;
-                    }
-
-                    .grade-list-table tr {
-                        margin-bottom: 1rem;
-                        border: 1px solid var(--color-border);
-                        border-radius: var(--radius-md);
-                        padding: 0.75rem;
-                        background: white;
-                    }
-
-                    .grade-list-table td {
-                        padding: 0.5rem 0;
-                        border: none;
-                        display: flex;
-                        justify-content: space-between;
-                        align-items: center;
-                    }
-
-                    .grade-list-table td:before {
-                        content: attr(data-label);
-                        font-weight: 700;
-                        color: #64748b;
-                        font-size: 0.85rem;
-                    }
-
-                    .grade-list-table td:nth-child(1):before {
-                        content: "평가 이름";
-                    }
-
-                    .grade-list-table td:nth-child(2):before {
-                        content: "그룹";
-                    }
-
-                    .grade-list-table td:nth-child(3):before {
-                        content: "평가 기준";
-                    }
-
-                    .grade-list-table td:nth-child(4):before {
-                        content: "작성일";
-                    }
-
-                    .grade-list-table td:nth-child(5):before {
-                        content: "관리";
-                    }
-
-                    .grade-actions-cell {
-                        justify-content: flex-end;
-                    }
-
-                    .grade-table th,
-                    .grade-table td {
-                        padding: 0.5rem;
-                        font-size: 0.9rem;
-                    }
-                }
-            `}</style>
         </div>
     );
 };
